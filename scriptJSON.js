@@ -1,7 +1,7 @@
 // URL del endpoint del microservicio
-const apiURL = 'http://35.238.46.198:8001/hour'
-const pdfApiURL = 'http://35.238.46.198:8001/normal_distribution'
-const mainDataURL = 'http://35.238.46.198:8001/dashboard_main_data'
+const apiURL = 'https://35.238.46.198.nip.io/hour'
+const pdfApiURL = 'https://35.238.46.198.nip.io/normal_distribution'
+const mainDataURL = 'https://35.238.46.198.nip.io/dashboard_main_data'
 
 // Obtener los datos del backend
 async function fetchData() {
