@@ -403,10 +403,20 @@ async function exportToExcel2() {
         }
 
         const response = await fetch(apiURL);
+        const response2 = await fetch(pdfApiURL);
+        const response3 = await fetch(mainDataURL);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
+        if (!response2.ok) {
+            throw new Error(`HTTP error! status: ${response2.status}`);
+        }
+        if (!response3.ok) {
+            throw new Error(`HTTP error! status: ${response3.status}`);
+        }
         const data = await response.json();
+        const data2 = await response2.json();
+        const data3 = await response3.json();
 
         const groupedData = groupBy(data, 'fecha');
         const workbook = new ExcelJS.Workbook();
@@ -428,9 +438,25 @@ async function exportToExcel2() {
             });
         });
 
+        // Añadir imágenes de las gráficas
         const chartCanvases = document.querySelectorAll("canvas[id^='chart-']");
         chartCanvases.forEach((canvas, index) => {
-            const chartBase64 = canvas.toDataURL("image/png");
+            const ctx = canvas.getContext('2d');
+
+            // Establecer fondo blanco antes de exportar
+            const originalWidth = canvas.width;
+            const originalHeight = canvas.height;
+
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = originalWidth;
+            tempCanvas.height = originalHeight;
+
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.fillStyle = 'white'; // Fondo blanco
+            tempCtx.fillRect(0, 0, originalWidth, originalHeight);
+            tempCtx.drawImage(canvas, 0, 0);
+
+            const chartBase64 = tempCanvas.toDataURL("image/png");
             const imageId = workbook.addImage({
                 base64: chartBase64,
                 extension: 'png',
@@ -444,6 +470,69 @@ async function exportToExcel2() {
                 });
             }
         });
+
+        // Añadir hoja de la distribución normal
+        const ws = workbook.addWorksheet('Distribucion normal');
+        ws.columns = [
+            { header: 'X', key: 'x', with: 15 },
+            { header: 'PDF', key: 'pdf', width: 20}
+        ]
+
+        data2.x.forEach((xValue, index) => {
+            ws.addRow({
+                x: xValue.toFixed(2),
+                pdf: data2.pdf[index].toFixed(6)
+            });
+        });
+
+        // Añadir gráfica de la distribución normal
+        const distributionChart = document.getElementById('distributionChart');
+        const distributionCtx = distributionChart.getContext('2d');
+
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = distributionChart.width;
+        tempCanvas.height = distributionChart.height;
+
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.fillStyle = 'white'; // Fondo blanco
+        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        tempCtx.drawImage(distributionChart, 0, 0);
+
+        const distChartBase64 = tempCanvas.toDataURL("image/png");
+        const distImageId = workbook.addImage({
+            base64: distChartBase64,
+            extension: 'png',
+        });
+
+        ws.addImage(distImageId, {
+            tl: { col: 2, row: 2 },
+            ext: { width: 500, height: 300 },
+        });
+
+        // Añadir hoja con los datos principales (media, mediana, desviación estándar y horas de máximas/mínimas)
+        const mainDataWorksheet = workbook.addWorksheet('Datos centrales');
+        mainDataWorksheet.columns = [
+            { header: 'Concepto', key: 'concepto', with: 30},
+            { header: 'Valor', key: 'valor', with: 50 }
+        ]
+
+        // Calcular la mediana
+        const temperatures = data.map(item => item.temperatura).sort((a, b) => a - b)
+        const middle = Math.floor(temperatures.length / 2)
+        const mediana = temperatures.length % 2 === 0
+            ? (temperatures[middle - 1] + temperatures[middle]) / 2
+            : temperatures[middle]
+        
+        // Añadir datos al worksheet
+        const mainDataRows = [
+            { concepto: 'Media', valor: data3.media.toFixed(2) },
+            { concepto: 'Mediana', valor: mediana.toFixed(2) },
+            { concepto: 'Desviación Estándar', valor: data3.desviacion.toFixed(2) },
+            { concepto: 'Horas de Máximas Temperaturas', valor: data3.tendencia_horas_maximas.join(', ') },
+            { concepto: 'Horas de Mínimas Temperaturas', valor: data3.tendencia_horas_minimas.join(', ') }
+        ]
+
+        mainDataRows.forEach(row => mainDataWorksheet.addRow(row))
 
         const buffer = await workbook.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
